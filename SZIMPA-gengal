@@ -1,0 +1,145 @@
+#!/usr/bin/perl
+# SZIMPA-gengal v0.01 (c) SZERVÁC Attila, 2025  Libre art  licence:  GPLv3
+use strict;
+use warnings;
+
+# Constants
+my $thd = '/museum-demo/z/';  # Thumbnail directory path
+
+# Send HTTP headers
+print "Content-Type: text/html\n\n";
+print <<END;
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<head>
+    <style>
+        body { font-family: Arial, sans-serif; }
+        table { 
+            width: 100%;
+            max-width: 900px;  /* A maximális szélesség 900px */
+            margin: 0 auto;    /* Középre igazítás */
+            border-collapse: collapse; 
+        }
+        td { 
+            text-align: center; 
+            padding: 10px; 
+            width: calc(100% / 3); /* Egyenlő szélességű oszlopok */
+            box-sizing: border-box; 
+        }
+        img { 
+            width: 100%; 
+            height: auto; 
+            border: 2px solid #ddd; 
+            padding: 5px; 
+        }
+        td p { margin-top: 5px; }
+    </style>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+ <title>SZIMPA – Szabad Ifjúsági Művészeti és Pedagógiai Adattár</title>
+</head>
+<body>
+<h2 style="color: #126700"><i>&nbsp;SZIMPA – Szabad Ifjúsági Művészeti és Pedagógiai Adattár</i></h2>
+<h1 style="text-align: center"> <i>Gyermekalkotások Galériája</i> demó</h1>
+END
+
+# Parse query string parameters
+my %params = map { split('=', $_, 2) } split('&', $ENV{'QUERY_STRING'} || '');
+
+# Filters from query string
+my ($pt_filter, $conti_filter, $country_filter, $y_filter) = @params{'pt', 'conti', 'country', 'y'};
+
+# Dynamically get the form action based on the script name
+my $form_action = $ENV{'SCRIPT_NAME'};
+
+# HTML form to select filters
+print "<form action=\"$form_action\">";
+print "<select name=\"pt\">";
+print_option($pt_filter, '', 'aqua', 'chalk', 'coprel', 'crayon', 'enamel', 'etching', 'felt', 'lino', 'monotyp', 'paperpla', 'pastel', 'photo', 'tempera');
+print "</select>";
+
+print "<select name=\"conti\">";
+print_option($conti_filter, '', 'AF', 'AS', 'AU', 'EU', 'NA', 'SA');
+print "</select>";
+
+print "<select name=\"country\">";
+print_option($country_filter, '', 'DE', 'HU', 'AT', 'PL', 'SK', 'CZ', 'RO', 'RS', 'GH', 'US', 'AU', 'BO', 'JP', 'IN');
+print "</select>";
+
+print "<select name=\"y\">";
+print_option($y_filter, '', '1974', '1975', '1976', '1977', '1978', '1979', '1980', '1981', '1982', '1983', '1984', '1985', '1986', '1987', '1988', '1989', '1990', '1997', '1998', '1999', '2000', '2001', '2002', '2003', '2004', '2005', '2006',  '2007', '2008', '2009', '2010', '2011', '2012' );
+print "</select>";
+
+# Reset button added (will now be a link)
+print " <input type=\"submit\" style=\"font-weight: bold\" value=\"Küldés\"> ";
+print " <a href=\"$form_action\" style=\"font-size: 11pt; text-decoration: none;\">reset</a>";
+print "</form>";
+
+# Exit if no filters are selected
+exit unless $pt_filter || $conti_filter || $country_filter || $y_filter;
+
+# Process the file
+my $filename = "GyG.tsv";
+open my $fh, '<', $filename or die "Unable to open file: $!\n";
+
+# Filtered lines based on query parameters
+my @filtered_lines = grep { filter_line($_, $pt_filter, $conti_filter, $country_filter, $y_filter) } <$fh>;
+
+# Print table
+print "<table width=900 style=\"margin: auto\">\n";
+process_rows(\@filtered_lines);
+print "</table>\n";
+
+# Close file
+close $fh;
+
+# Subroutine to print options for the select menu
+sub print_option {
+    my ($selected, @values) = @_;
+    foreach my $value (@values) {
+        print "<option value=\"$value\" " . ($value eq $selected ? "selected" : "") . ">$value</option>";
+    }
+}
+
+# Subroutine to filter lines based on pt and y values
+sub filter_line {
+    my ($line, $pt_filter, $conti_filter, $country_filter, $y_filter) = @_;
+    my @fields = split("\t", $line);
+    return 0 if $pt_filter && $fields[1] ne $pt_filter;
+    return 0 if $conti_filter && $fields[2] ne $conti_filter;
+    return 0 if $country_filter && $fields[4] ne $country_filter;
+    return 0 if $y_filter && substr($fields[6], 2, 4) ne $y_filter;
+    return 1;
+}
+
+# Subroutine to process the rows and display them in 3-column table
+sub process_rows {
+    my ($lines) = @_;
+    for (my $i = 0; $i < @$lines; $i += 3) {
+        print "<tr>";
+        # Process each row in the set of 3
+        for my $j (0..2) {
+            my $line = $lines->[$i + $j] || '';  # If no line, set to empty string
+            print "<td>" . process_line($line) . "</td>";
+        }
+        print "</tr>\n";
+    }
+}
+
+# Subroutine to process a line and format the output
+sub process_line {
+    my ($line) = @_;
+    
+    # If line is empty, return an empty string (no img or text)
+    return "" unless $line;
+
+    my @fields = split("\t", $line);
+    
+    # Image from 4th field and the rest of the fields
+    my $img_tag = "<img src=\"$thd$fields[3]\" style=\"max-width: 96%; height: auto;\" /><br />";
+    
+    # Create text from fields (first 3 and 5th onwards)
+    my $text = "$fields[0] $fields[1] $fields[2] " . join(" ", @fields[4..$#fields]);
+
+    # If image exists, show it along with text
+    return "$img_tag$text";
+}
+print "<p><br />dbengine 0.01 (c) SZERVÁC Attila, 2025, <i> Libre art &nbsp;</i>licence: GPLv3 &/| CC-BY-SA 4.0 International</p>";
